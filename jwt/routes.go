@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func Routes() *chi.Mux {
@@ -105,7 +106,7 @@ func (h *JWTHandler) SigninUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Actually hash things here.
-	if u.PasswordHash != ur.Password {
+	if err = bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(ur.Password)); nil != err {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}

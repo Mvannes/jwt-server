@@ -13,6 +13,7 @@ func Routes() *chi.Mux {
 	h := ProvideKeyHandler()
 	r := chi.NewRouter()
 
+	r.Get("/rotate", h.RotateKey)
 	r.Get("/", h.GetLatestKeyVersion)
 	r.Get("/{uuid}", h.GetSpecificKeyVersion)
 
@@ -25,6 +26,14 @@ type KeyHandler struct {
 
 func ProvideKeyHandler() *KeyHandler {
 	return &KeyHandler{KeyManager: ProvideKeyManager()}
+}
+
+func (h *KeyHandler) RotateKey(w http.ResponseWriter, r *http.Request) {
+	err := h.KeyManager.CreateKeyPair()
+	if nil != err {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	render.PlainText(w, r, "key-rotated")
 }
 
 func (h *KeyHandler) GetLatestKeyVersion(w http.ResponseWriter, r *http.Request) {

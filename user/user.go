@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 var UserExistsError = errors.New("User already exists")
@@ -64,10 +66,15 @@ func (us *JSONUserRepository) StoreUser(email string, name string, password stri
 		return err
 	}
 
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), 6)
+	if nil != err {
+		return err
+	}
+
 	u := User{
 		Email:        email,
 		Name:         name,
-		PasswordHash: password, // Needs hashing of some sort.
+		PasswordHash: string(hashedPassword),
 	}
 
 	userList = append(userList, u)
@@ -89,7 +96,7 @@ func (us *JSONUserRepository) getUserList() ([]User, error) {
 		}
 	}
 
-	var userList []User
+	var userList []User // Make sure that this does not return users with their password.
 	if len(fileContent) > 0 {
 		if err = json.Unmarshal(fileContent, &userList); nil != err {
 			return userList, err

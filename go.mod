@@ -10,4 +10,5 @@ require (
 	github.com/go-playground/validator/v10 v10.4.1
 	github.com/google/uuid v1.1.2
 	github.com/google/wire v0.4.0 // indirect
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 )

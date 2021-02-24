@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"jwt-server/jwt"
 	"jwt-server/key"
 	"log"
@@ -32,17 +31,26 @@ func Routes() *chi.Mux {
 	return r
 }
 
-func main() {
+func initKeys() error {
 	km := key.ProvideKeyManager()
-	// km.CreateKeyPair()
-	latestVersion, err := km.FetchLatestKeyVersion()
+	_, err := km.FetchLatestKeyVersion()
 
+	if nil == err {
+		return nil
+	}
+	if err == key.KeyNotFound {
+		err = km.CreateKeyPair()
+	}
+	return err
+
+}
+
+func main() {
+	err := initKeys()
 	if nil != err {
 		log.Fatal(err)
 	}
-
 	r := Routes()
-	http.ListenAndServe(":8080", r)
+	log.Fatal(http.ListenAndServe(":8081", r))
 
-	fmt.Println(km.FetchKeyPair(latestVersion))
 }
