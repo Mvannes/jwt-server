@@ -1,4 +1,4 @@
-module jwt-server
+module github.com/mvannes/jwt-server
 
 go 1.15
 
