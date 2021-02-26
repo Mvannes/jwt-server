@@ -32,7 +32,7 @@ func Routes() *chi.Mux {
 }
 
 func initKeys() error {
-	km := key.ProvideKeyManager()
+	km := key.NewKeyManager()
 	_, err := km.FetchLatestKeyVersion()
 
 	if nil == err {

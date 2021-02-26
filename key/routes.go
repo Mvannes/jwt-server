@@ -25,7 +25,7 @@ type KeyHandler struct {
 }
 
 func ProvideKeyHandler() *KeyHandler {
-	return &KeyHandler{KeyManager: ProvideKeyManager()}
+	return &KeyHandler{KeyManager: NewKeyManager()}
 }
 
 func (h *KeyHandler) RotateKey(w http.ResponseWriter, r *http.Request) {

@@ -30,7 +30,7 @@ type KeyManager struct {
 
 var KeyNotFound = errors.New("Key not found.")
 
-func ProvideKeyManager() *KeyManager {
+func NewKeyManager() *KeyManager {
 	return &KeyManager{
 		storageDir: "keys",
 	}
@@ -96,7 +96,7 @@ func (k *KeyManager) CreateKeyPair() error {
 	basePath := path.Join(k.storageDir, uuid.String())
 
 	if _, err := os.Stat(basePath); os.IsNotExist(err) {
-		os.MkdirAll(basePath, os.ModePerm)
+		err = os.MkdirAll(basePath, os.ModePerm)
 	}
 
 	if nil != err {

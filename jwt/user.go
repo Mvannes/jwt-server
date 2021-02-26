@@ -1,4 +1,4 @@
-package user
+package jwt
 
 import (
 	"encoding/json"
@@ -25,17 +25,17 @@ type UserRepository interface {
 }
 
 type JSONUserRepository struct {
-	StorageDir string
-	FileName   string
+	storageDir string
+	fileName   string
 }
 
-var jsonStorageInstance *JSONUserRepository
+var jsonUserStorageInstance *JSONUserRepository
 
 func NewJSONUserRepository(storageDir string, fileName string) *JSONUserRepository {
-	if jsonStorageInstance == nil {
-		jsonStorageInstance = &JSONUserRepository{StorageDir: storageDir, FileName: fileName}
+	if jsonUserStorageInstance == nil {
+		jsonUserStorageInstance = &JSONUserRepository{storageDir: storageDir, fileName: fileName}
 	}
-	return jsonStorageInstance
+	return jsonUserStorageInstance
 }
 
 func (us *JSONUserRepository) GetUser(email string) (*User, error) {
@@ -53,9 +53,10 @@ func (us *JSONUserRepository) GetUser(email string) (*User, error) {
 	return nil, UserNotFoundError
 }
 
+// TODO: Convert to get user object instead of strings. This is not what should be responsible for making the user object.
 func (us *JSONUserRepository) StoreUser(email string, name string, password string) error {
-	if _, err := os.Stat(us.StorageDir); os.IsNotExist(err) {
-		err = os.MkdirAll(us.StorageDir, os.ModePerm)
+	if _, err := os.Stat(us.storageDir); os.IsNotExist(err) {
+		err = os.MkdirAll(us.storageDir, os.ModePerm)
 		if nil != err {
 			return err
 		}
@@ -84,12 +85,12 @@ func (us *JSONUserRepository) StoreUser(email string, name string, password stri
 		return err
 	}
 
-	err = ioutil.WriteFile(path.Join(us.StorageDir, us.FileName), jsonList, 0644)
+	err = ioutil.WriteFile(path.Join(us.storageDir, us.fileName), jsonList, 0644)
 	return err
 }
 
 func (us *JSONUserRepository) getUserList() ([]User, error) {
-	fileContent, err := ioutil.ReadFile(path.Join(us.StorageDir, us.FileName))
+	fileContent, err := ioutil.ReadFile(path.Join(us.storageDir, us.fileName))
 	if nil != err {
 		if !os.IsNotExist(err) {
 			return nil, err
