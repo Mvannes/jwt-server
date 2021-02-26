@@ -3,9 +3,10 @@ package jwt
 import (
 	"errors"
 	"fmt"
-	"jwt-server/key"
 	"strings"
 	"time"
+
+	"github.com/mvannes/jwt-server/key"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/google/uuid"
