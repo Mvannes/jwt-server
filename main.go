@@ -1,8 +1,8 @@
 package main
 
 import (
-	"jwt-server/jwt"
-	"jwt-server/key"
+	"github.com/mvannes/jwt-server/jwt"
+	"github.com/mvannes/jwt-server/key"
 	"log"
 	"net/http"
 	"time"
