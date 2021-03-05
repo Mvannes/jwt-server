@@ -20,6 +20,11 @@ func Routes() *chi.Mux {
 	return r
 }
 
+type KeyResponse struct {
+	UUID      string `json:"uuid"`
+	PublicKey string `json:"publicKey"`
+}
+
 type KeyHandler struct {
 	KeyManager KeyManagerInterface
 }
@@ -69,5 +74,9 @@ func (h *KeyHandler) getKey(w http.ResponseWriter, r *http.Request, keyVersion s
 		Type:  "PUBLIC KEY",
 		Bytes: x509.MarshalPKCS1PublicKey(keyPair.PublicKey),
 	}
-	render.PlainText(w, r, string(pem.EncodeToMemory(publicKeyBlock)))
+	res := KeyResponse{
+		UUID:      keyVersion,
+		PublicKey: string(pem.EncodeToMemory(publicKeyBlock)),
+	}
+	render.JSON(w, r, res)
 }
