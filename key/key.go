@@ -119,7 +119,7 @@ func (k *KeyManager) CreateKeyPair() error {
 	}
 
 	publicKeyBlock := &pem.Block{
-		Type:  "PUBLIC KEY",
+		Type:  "RSA PUBLIC KEY",
 		Bytes: x509.MarshalPKCS1PublicKey(&privateKey.PublicKey),
 	}
 
