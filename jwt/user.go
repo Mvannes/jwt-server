@@ -14,14 +14,15 @@ var UserExistsError = errors.New("User already exists")
 var UserNotFoundError = errors.New("User not found")
 
 type User struct {
-	Email        string `json:"email"`
+	Username     string `json:"username"`
 	Name         string `json:"name"`
 	PasswordHash string `json:"passwordHash"`
 }
 
+
 type UserRepository interface {
-	GetUser(email string) (*User, error)
-	StoreUser(email string, name string, password string) error
+	GetUser(username string) (*User, error)
+	StoreUser(username string, name string, password string) error
 }
 
 type JSONUserRepository struct {
@@ -38,14 +39,14 @@ func NewJSONUserRepository(storageDir string, fileName string) *JSONUserReposito
 	return jsonUserStorageInstance
 }
 
-func (us *JSONUserRepository) GetUser(email string) (*User, error) {
+func (us *JSONUserRepository) GetUser(username string) (*User, error) {
 	userList, err := us.getUserList()
 	if nil != err {
 		return nil, err
 	}
 
 	for _, user := range userList {
-		if user.Email == email {
+		if user.Username == username {
 			return &user, nil
 		}
 	}
@@ -53,8 +54,7 @@ func (us *JSONUserRepository) GetUser(email string) (*User, error) {
 	return nil, UserNotFoundError
 }
 
-// TODO: Convert to get user object instead of strings. This is not what should be responsible for making the user object.
-func (us *JSONUserRepository) StoreUser(email string, name string, password string) error {
+func (us *JSONUserRepository) StoreUser(username string, name string, password string) error {
 	if _, err := os.Stat(us.storageDir); os.IsNotExist(err) {
 		err = os.MkdirAll(us.storageDir, os.ModePerm)
 		if nil != err {
@@ -73,7 +73,7 @@ func (us *JSONUserRepository) StoreUser(email string, name string, password stri
 	}
 
 	u := User{
-		Email:        email,
+		Username:     username,
 		Name:         name,
 		PasswordHash: string(hashedPassword),
 	}

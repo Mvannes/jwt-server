@@ -23,13 +23,13 @@ func Routes() *chi.Mux {
 }
 
 type UserSignUpRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Username string `json:"username" validate:"required,max=256"`
 	Name     string `json:"name" validate:"required,max=256"`
 	Password string `json:"password" validate:"required"`
 }
 
 type UserSignInRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Username string `json:"username" validate:"required,max=256"`
 	Password string `json:"password" validate:"required"`
 }
 
@@ -75,7 +75,7 @@ func (h *JWTHandler) SignUpUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.UserRepository.GetUser(ur.Email)
+	u, err := h.UserRepository.GetUser(ur.Username)
 	if nil != err && err != UserNotFoundError {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -85,7 +85,7 @@ func (h *JWTHandler) SignUpUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.UserRepository.StoreUser(ur.Email, ur.Name, ur.Password)
+	err = h.UserRepository.StoreUser(ur.Username, ur.Name, ur.Password)
 	if nil != err {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -110,7 +110,7 @@ func (h *JWTHandler) SigninUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	u, err := h.UserRepository.GetUser(ur.Email)
+	u, err := h.UserRepository.GetUser(ur.Username)
 	if nil != err {
 		if err == UserNotFoundError {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -125,13 +125,13 @@ func (h *JWTHandler) SigninUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	at, err := h.TokenManager.CreateAccessToken(u.Email, u.Name)
+	at, err := h.TokenManager.CreateAccessToken(u.Username, u.Name)
 	if nil != err {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	rt, err := h.TokenManager.CreateRefreshToken(u.Email)
+	rt, err := h.TokenManager.CreateRefreshToken(u.Username)
 
 	if nil != err {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -202,7 +202,7 @@ func (h *JWTHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	at, err := h.TokenManager.CreateAccessToken(u.Email, u.Name)
+	at, err := h.TokenManager.CreateAccessToken(u.Username, u.Name)
 	if nil != err {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
