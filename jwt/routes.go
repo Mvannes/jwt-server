@@ -14,6 +14,7 @@ func Routes() *chi.Mux {
 	h := ProvideJWTHandler()
 	r := chi.NewRouter()
 
+	r.Get("/users", h.UserList)
 	r.Post("/signup", h.SignUpUser)
 	r.Post("/signin", h.SigninUser)
 	r.Post("/refresh", h.RefreshToken)
@@ -44,6 +45,11 @@ type InvalidateTokenRequest struct {
 
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refreshToken"`
+}
+
+type UserResponse struct {
+	Username string `json:"username"`
+	Name     string `json:"name"`
 }
 
 type JWTHandler struct {
@@ -209,4 +215,23 @@ func (h *JWTHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.PlainText(w, r, at)
+}
+
+func (h *JWTHandler) UserList(w http.ResponseWriter, r *http.Request) {
+	uList, err := h.UserRepository.GetUserList()
+
+	var resp []UserResponse
+
+	for _, user := range uList {
+		resp = append(resp, UserResponse{
+			Username: user.Username,
+			Name:     user.Name,
+		})
+	}
+
+	if nil != err {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	render.JSON(w, r, resp)
 }

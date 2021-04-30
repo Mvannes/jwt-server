@@ -19,10 +19,10 @@ type User struct {
 	PasswordHash string `json:"passwordHash"`
 }
 
-
 type UserRepository interface {
 	GetUser(username string) (*User, error)
 	StoreUser(username string, name string, password string) error
+	GetUserList() ([]User, error)
 }
 
 type JSONUserRepository struct {
@@ -40,7 +40,7 @@ func NewJSONUserRepository(storageDir string, fileName string) *JSONUserReposito
 }
 
 func (us *JSONUserRepository) GetUser(username string) (*User, error) {
-	userList, err := us.getUserList()
+	userList, err := us.GetUserList()
 	if nil != err {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func (us *JSONUserRepository) StoreUser(username string, name string, password s
 		}
 	}
 
-	userList, err := us.getUserList()
+	userList, err := us.GetUserList()
 	if nil != err {
 		return err
 	}
@@ -89,7 +89,7 @@ func (us *JSONUserRepository) StoreUser(username string, name string, password s
 	return err
 }
 
-func (us *JSONUserRepository) getUserList() ([]User, error) {
+func (us *JSONUserRepository) GetUserList() ([]User, error) {
 	fileContent, err := ioutil.ReadFile(path.Join(us.storageDir, us.fileName))
 	if nil != err {
 		if !os.IsNotExist(err) {
