@@ -1,17 +1,19 @@
 package main
 
 import (
-	"github.com/mvannes/jwt-server/jwt"
-	"github.com/mvannes/jwt-server/key"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/mvannes/jwt-server/config"
+	"github.com/mvannes/jwt-server/jwk"
+	"github.com/mvannes/jwt-server/jwt"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 )
 
-func Routes() *chi.Mux {
+func Routes(config config.Config) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -25,20 +27,20 @@ func Routes() *chi.Mux {
 		w.Write([]byte("hoi"))
 	})
 
-	r.Mount("/key", key.Routes())
-	r.Mount("/jwt", jwt.Routes())
+	r.Mount("/jwk", jwk.Routes(config))
+	r.Mount("/jwt", jwt.Routes(config))
 
 	return r
 }
 
 func initKeys() error {
-	km := key.NewKeyManager()
+	km := jwk.NewKeyManager()
 	_, err := km.FetchLatestKeyVersion()
 
 	if nil == err {
 		return nil
 	}
-	if err == key.KeyNotFound {
+	if err == jwk.KeyNotFound {
 		err = km.CreateKeyPair()
 	}
 	return err
@@ -46,11 +48,15 @@ func initKeys() error {
 }
 
 func main() {
+	config := config.Config{
+		DomainName:     "localhost:8081",
+		JWKLocationURL: "/",
+	}
 	err := initKeys()
 	if nil != err {
 		log.Fatal(err)
 	}
-	r := Routes()
+	r := Routes(config)
 	log.Fatal(http.ListenAndServe(":8081", r))
 
 }

@@ -3,10 +3,12 @@ package jwt
 import (
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
-	"github.com/mvannes/jwt-server/key"
+	"github.com/mvannes/jwt-server/config"
+	"github.com/mvannes/jwt-server/jwk"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/google/uuid"
@@ -31,17 +33,19 @@ type TokenManagerInterface interface {
 }
 
 type TokenManager struct {
-	keyManager             key.KeyManagerInterface
+	keyManager             jwk.KeyManagerInterface
 	refreshTokenRepository RefreshTokenRepository
+	config                 config.Config
 }
 
 var tokenManagerInstance *TokenManager
 
-func NewTokenManager() *TokenManager {
+func NewTokenManager(config config.Config) *TokenManager {
 	if nil == tokenManagerInstance {
 		tokenManagerInstance = &TokenManager{
-			keyManager:             key.NewKeyManager(),
+			keyManager:             jwk.NewKeyManager(),
 			refreshTokenRepository: NewJSONRefreshTokenRepository("tokens", "tokens.json"),
+			config:                 config,
 		}
 	}
 	return tokenManagerInstance
@@ -113,6 +117,7 @@ func (t *TokenManager) CreateAccessToken(username string, name string) (string, 
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS512, claims)
 	token.Header["kid"] = latestVersion
+	token.Header["jku"] = path.Join(t.config.DomainName, "/jwk", t.config.JWKLocationURL)
 	return token.SignedString(keyPair.PrivateKey)
 }
 
@@ -139,6 +144,7 @@ func (t *TokenManager) CreateRefreshToken(username string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS512, claims)
 	token.Header["kid"] = latestVersion
+	token.Header["jku"] = t.config.DomainName + t.config.JWKLocationURL
 	tokenString, err := token.SignedString(keyPair.PrivateKey)
 	if nil != err {
 		return "", err

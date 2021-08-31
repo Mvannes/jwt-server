@@ -7,11 +7,12 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/render"
 	validator "github.com/go-playground/validator/v10"
+	"github.com/mvannes/jwt-server/config"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func Routes() *chi.Mux {
-	h := ProvideJWTHandler()
+func Routes(config config.Config) *chi.Mux {
+	h := ProvideJWTHandler(config)
 	r := chi.NewRouter()
 
 	r.Get("/users", h.UserList)
@@ -57,10 +58,10 @@ type JWTHandler struct {
 	TokenManager   TokenManagerInterface
 }
 
-func ProvideJWTHandler() *JWTHandler {
+func ProvideJWTHandler(config config.Config) *JWTHandler {
 	return &JWTHandler{
 		UserRepository: NewJSONUserRepository("users", "people.json"),
-		TokenManager:   NewTokenManager(),
+		TokenManager:   NewTokenManager(config),
 	}
 }
 

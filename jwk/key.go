@@ -1,4 +1,4 @@
-package key
+package jwk
 
 import (
 	"crypto/rand"
@@ -20,6 +20,7 @@ type KeyPair struct {
 
 type KeyManagerInterface interface {
 	FetchKeyPair(version string) (KeyPair, error)
+	FetchAllKeyVersions() ([]string, error)
 	FetchLatestKeyVersion() (string, error)
 	CreateKeyPair() error
 }
@@ -65,6 +66,21 @@ func (k *KeyManager) FetchKeyPair(version string) (KeyPair, error) {
 	}
 
 	return KeyPair{PrivateKey: privateKey, PublicKey: publicKey}, nil
+}
+
+func (k *KeyManager) FetchAllKeyVersions() ([]string, error) {
+	files, err := ioutil.ReadDir(k.storageDir)
+	keyVersions := make([]string, 0)
+
+	if nil != err {
+		return keyVersions, err
+	}
+
+	for _, f := range files {
+		keyVersions = append(keyVersions, f.Name())
+	}
+
+	return keyVersions, nil
 }
 
 func (k *KeyManager) FetchLatestKeyVersion() (string, error) {
