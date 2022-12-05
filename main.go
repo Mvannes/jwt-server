@@ -9,8 +9,8 @@ import (
 	"github.com/mvannes/jwt-server/jwk"
 	"github.com/mvannes/jwt-server/jwt"
 
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 func Routes(config config.Config) *chi.Mux {
@@ -48,7 +48,7 @@ func initKeys() error {
 }
 
 func main() {
-	config := config.Config{
+	c := config.Config{
 		DomainName:     "localhost:8081",
 		JWKLocationURL: "/",
 	}
@@ -56,7 +56,8 @@ func main() {
 	if nil != err {
 		log.Fatal(err)
 	}
-	r := Routes(config)
+	r := Routes(c)
+
 	log.Fatal(http.ListenAndServe(":8081", r))
 
 }

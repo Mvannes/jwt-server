@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	validator "github.com/go-playground/validator/v10"
 	"github.com/mvannes/jwt-server/config"

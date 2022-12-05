@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"net/http"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/mvannes/jwt-server/config"
 )
@@ -14,7 +14,7 @@ func Routes(config config.Config) *chi.Mux {
 	h := ProvideKeyHandler()
 	r := chi.NewRouter()
 
-	r.Get("/rotate", h.RotateKey)
+	r.Post("/rotate", h.RotateKey)
 	r.Get(config.JWKLocationURL, h.GetJWKs)
 
 	return r

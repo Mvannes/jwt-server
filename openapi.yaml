@@ -1,0 +1,136 @@
+openapi: 3.0.3
+info:
+  title: JWT server
+  description: JWT server for user authentication
+  version: 1.0.0
+servers:
+  - url: 'https'
+paths:
+  /jwk/rotate:
+    post:
+      operationId: "rotateJWK"
+      tags:
+        - "jwk"
+      description: "Rotate the JWK, creating a new key to sign JWTs with."
+      responses:
+        200:
+          description: "Key successfully rotated."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/rotateOKResponse"
+        500:
+          description: "Internal server Error"
+
+  /jwk:
+    get:
+      operationId: "getJWKs"
+      tags:
+        - "jwk"
+      description: "Get all current JWKs for use in validation of tokens."
+      responses:
+        200:
+          description: "Active JWKs"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/jwkResponse"
+  /jwt/users:
+    get:
+      operationId: "getUsers"
+      tags:
+        - "jwt"
+      description: "Get all users"
+      responses:
+        200:
+          description: "UserList"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/usersResponse"
+  /jwt/signup:
+    post:
+      operationId: "signup"
+      tags:
+        - "jwt"
+      description: "Sign up a new user"
+      requestBody:
+        content:
+          application/json:
+            schema:
+
+      responses:
+        200:
+          description: "User successfully signed up"
+          content:
+            application/json:
+              schema:
+
+
+components:
+  schemas:
+    rotateOKResponse:
+      type: object
+      description: "JWK successfully rotated."
+      properties:
+        success:
+          type: string
+          example: "OK"
+    jwkResponse:
+      type: object
+      description: "Container for JWKS"
+      properties:
+        jwks:
+          type: array
+          items:
+            $ref: "#/components/schemas/jwk"
+
+    jwk:
+      type: object
+      description: "JWK"
+      properties:
+        kid:
+          type: string
+          description: "Key id"
+          example: "d53af85e-27cb-4b4a-9e6a-2f49b35b2da8"
+        kty:
+          type: string
+          description: "Key type"
+          enum:
+            - "RSA"
+        use:
+          type: string
+          description: "Use"
+          enum:
+            - "sig"
+        alg:
+          type: string
+          description: "Algorithm"
+          enum:
+            - "RS512"
+        mod:
+          type: string
+          description: "Modulus"
+        exp:
+          type: string
+          description: "Exponent"
+
+    usersResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/user"
+
+    user:
+      type: object
+      properties:
+        username:
+          type: string
+          description: "The user's login name."
+          example: "henk"
+        name:
+          type: string
+          description: "The user's full name."
+          example: "Henk de Vries"
