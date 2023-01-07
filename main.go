@@ -24,7 +24,7 @@ func Routes(config config.Config) *chi.Mux {
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("hoi"))
+		w.Write([]byte("OK"))
 	})
 
 	r.Mount("/jwk", jwk.Routes(config))
@@ -49,7 +49,7 @@ func initKeys() error {
 
 func main() {
 	c := config.Config{
-		DomainName:     "localhost:8081",
+		DomainName:     "localhost:8080",
 		JWKLocationURL: "/",
 	}
 	err := initKeys()
@@ -58,6 +58,6 @@ func main() {
 	}
 	r := Routes(c)
 
-	log.Fatal(http.ListenAndServe(":8081", r))
+	log.Fatal(http.ListenAndServe(":8080", r))
 
 }

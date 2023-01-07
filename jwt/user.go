@@ -13,10 +13,23 @@ import (
 var UserExistsError = errors.New("User already exists")
 var UserNotFoundError = errors.New("User not found")
 
+type TwoFactorType string
+
+const (
+	TwoFactorDisabled      TwoFactorType = "disabled"
+	TwoFactorAuthenticator               = "authenticator"
+)
+
+type TwoFactor struct {
+	Type                  TwoFactorType `json:"type"`
+	OneTimePasswordSecret string        `json:"oneTimePasswordSecret"`
+}
+
 type User struct {
-	Username     string `json:"username"`
-	Name         string `json:"name"`
-	PasswordHash string `json:"passwordHash"`
+	Username      string    `json:"username"`
+	Name          string    `json:"name"`
+	PasswordHash  string    `json:"passwordHash"`
+	TwoFactorInfo TwoFactor `json:"twoFactorInfo"`
 }
 
 type UserRepository interface {
@@ -76,6 +89,10 @@ func (us *JSONUserRepository) StoreUser(username string, name string, password s
 		Username:     username,
 		Name:         name,
 		PasswordHash: string(hashedPassword),
+		TwoFactorInfo: TwoFactor{
+			Type:                  TwoFactorDisabled,
+			OneTimePasswordSecret: "",
+		},
 	}
 
 	userList = append(userList, u)
@@ -85,7 +102,7 @@ func (us *JSONUserRepository) StoreUser(username string, name string, password s
 		return err
 	}
 
-	err = ioutil.WriteFile(path.Join(us.storageDir, us.fileName), jsonList, 0644)
+	err = os.WriteFile(path.Join(us.storageDir, us.fileName), jsonList, 0644)
 	return err
 }
 

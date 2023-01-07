@@ -2,6 +2,7 @@ package jwt
 
 import (
 	"encoding/json"
+	"github.com/pquerna/otp/totp"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -20,6 +21,8 @@ func Routes(config config.Config) *chi.Mux {
 	r.Post("/signin", h.SigninUser)
 	r.Post("/refresh", h.RefreshToken)
 	r.Post("/token/invalidate", h.InvalidateToken)
+	r.Post("/users/{username}/two-factor", h.UpdateTwoFactor)
+	r.Post("/users/{username}/two-factor/check", h.ValidateTwoFactor)
 
 	return r
 }
@@ -53,15 +56,25 @@ type UserResponse struct {
 	Name     string `json:"name"`
 }
 
+type UpdateTwoFactorRequest struct {
+	Type TwoFactorType `json:"type" validate:"required"`
+}
+
+type ValidateTwoFactorRequest struct {
+	Code string `json:"code" validate:"required"`
+}
+
 type JWTHandler struct {
 	UserRepository UserRepository
 	TokenManager   TokenManagerInterface
+	Config         config.Config
 }
 
 func ProvideJWTHandler(config config.Config) *JWTHandler {
 	return &JWTHandler{
 		UserRepository: NewJSONUserRepository("users", "people.json"),
 		TokenManager:   NewTokenManager(config),
+		Config:         config,
 	}
 }
 
@@ -182,7 +195,6 @@ func (h *JWTHandler) InvalidateToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *JWTHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
-
 	var rtr RefreshTokenRequest
 
 	err := json.NewDecoder(r.Body).Decode(&rtr)
@@ -235,4 +247,73 @@ func (h *JWTHandler) UserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	render.JSON(w, r, resp)
+}
+
+func (h *JWTHandler) UpdateTwoFactor(w http.ResponseWriter, r *http.Request) {
+	var utfr UpdateTwoFactorRequest
+	err := json.NewDecoder(r.Body).Decode(&utfr)
+	if nil != err {
+		http.Error(w, err.Error(), 500)
+	}
+
+	username := chi.URLParam(r, "username")
+	u, err := h.UserRepository.GetUser(username)
+	if nil != err {
+		if err == UserNotFoundError {
+			http.Error(w, err.Error(), 404)
+			return
+		}
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	switch utfr.Type {
+	case TwoFactorDisabled:
+		u.TwoFactorInfo.Type = TwoFactorDisabled
+		u.TwoFactorInfo.OneTimePasswordSecret = ""
+	case TwoFactorAuthenticator:
+		u.TwoFactorInfo.Type = TwoFactorAuthenticator
+		key, err := totp.Generate(totp.GenerateOpts{
+			Issuer:      h.Config.DomainName,
+			AccountName: u.Username,
+		})
+		if nil != err {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		u.TwoFactorInfo.OneTimePasswordSecret = key.Secret()
+		// TODO: save this user object properly. Requires some rewrite of user code to be better structured.
+		// Consider splitting it all off into its own pkg.
+		render.JSON(w, r, key.Secret())
+	}
+}
+
+func (h *JWTHandler) ValidateTwoFactor(w http.ResponseWriter, r *http.Request) {
+	var vtfr ValidateTwoFactorRequest
+	err := json.NewDecoder(r.Body).Decode(&vtfr)
+	if nil != err {
+		http.Error(w, err.Error(), 500)
+	}
+
+	username := chi.URLParam(r, "username")
+	u, err := h.UserRepository.GetUser(username)
+	if nil != err {
+		if err == UserNotFoundError {
+			http.Error(w, err.Error(), 404)
+			return
+		}
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if u.TwoFactorInfo.Type == TwoFactorDisabled {
+		http.Error(w, "Two factor was not enabled for this user", 400)
+		return
+	}
+
+	msg := "invalid code"
+	if totp.Validate(vtfr.Code, u.TwoFactorInfo.OneTimePasswordSecret) {
+		msg = "valid code!"
+	}
+	// Everything that does a render of the plaintext, should not do that instead.
+	render.PlainText(w, r, msg)
 }

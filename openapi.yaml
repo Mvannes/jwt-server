@@ -58,13 +58,32 @@ paths:
         content:
           application/json:
             schema:
-
+              $ref: "#/components/schemas/userSignupRequest"
       responses:
         200:
           description: "User successfully signed up"
           content:
             application/json:
               schema:
+                $ref: "#/components/schemas/userSignupResponse"
+  /jwt/signin:
+    post:
+      operationId: "signin"
+      tags:
+        - "jwt"
+      description: "Sign in an existing user"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/userSigninRequest"
+      responses:
+        200:
+          description: "User successfully signed in"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/userSigninResponse"
 
 
 components:
@@ -76,6 +95,7 @@ components:
         success:
           type: string
           example: "OK"
+
     jwkResponse:
       type: object
       description: "Container for JWKS"
@@ -134,3 +154,45 @@ components:
           type: string
           description: "The user's full name."
           example: "Henk de Vries"
+
+    userSignupRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          description: "The user's login name."
+          example: "henk"
+        name:
+          type: string
+          description: "The user's full name."
+          example: "Henk de Vries"
+        password:
+          type: string
+          description: "The user's password."
+          example: "!secure-and-safe-123!"
+
+    userSignupResponse:
+      type: string
+      example: "User signed up successfully"
+
+    userSigninRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          description: "The user's login name."
+          example: "henk"
+        password:
+          type: string
+          description: "The user's password."
+          example: "!secure-and-safe-123!"
+
+    userSigninResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: "JWT access token, base64 encoded"
+        refreshToken:
+          type: string
+          description: "JWT refresh token, base64 encoded"
