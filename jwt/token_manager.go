@@ -14,6 +14,12 @@ import (
 	"github.com/google/uuid"
 )
 
+type TwoFactorClaims struct {
+	Username      string `json:"username"`
+	TwoFactorType string `json:"twoFactorType"`
+	jwt.StandardClaims
+}
+
 type AccessTokenClaims struct {
 	Username string `json:"username"`
 	Name     string `json:"name"`
@@ -27,6 +33,7 @@ type RefreshTokenClaims struct {
 
 type TokenManagerInterface interface {
 	DecodeRefreshToken(refreshToken string) (RefreshToken, error)
+	CreateTwoFactorToken(username string) (string, error)
 	CreateAccessToken(username string, name string) (string, error)
 	CreateRefreshToken(username string) (string, error)
 	InvalidateRefreshToken(uuid string) error
@@ -92,6 +99,33 @@ func (t *TokenManager) DecodeRefreshToken(refreshToken string) (RefreshToken, er
 		return RefreshToken{}, errors.New("Given refresh token is no longer valid")
 	}
 	return rt, nil
+}
+
+func (t *TokenManager) CreateTwoFactorToken(username string) (string, error) {
+	latestVersion, err := t.keyManager.FetchLatestKeyVersion()
+	if nil != err {
+		return "", err
+	}
+
+	keyPair, err := t.keyManager.FetchKeyPair(latestVersion)
+	if nil != err {
+		return "", err
+	}
+	now := time.Now()
+
+	claims := &TwoFactorClaims{
+		Username:      username,
+		TwoFactorType: "basic",
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: now.Add(5 * time.Minute).Unix(),
+			IssuedAt:  now.Unix(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS512, claims)
+	token.Header["kid"] = latestVersion
+	token.Header["jku"] = path.Join(t.config.DomainName, "/jwk", t.config.JWKLocationURL)
+	return token.SignedString(keyPair.PrivateKey)
 }
 
 func (t *TokenManager) CreateAccessToken(username string, name string) (string, error) {

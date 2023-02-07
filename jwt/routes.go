@@ -2,6 +2,9 @@ package jwt
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/mvannes/jwt-server/two_factor"
+	"github.com/mvannes/jwt-server/user"
 	"github.com/pquerna/otp/totp"
 	"net/http"
 
@@ -16,21 +19,12 @@ func Routes(config config.Config) *chi.Mux {
 	h := ProvideJWTHandler(config)
 	r := chi.NewRouter()
 
-	r.Get("/users", h.UserList)
-	r.Post("/signup", h.SignUpUser)
-	r.Post("/signin", h.SigninUser)
-	r.Post("/refresh", h.RefreshToken)
+	r.Post("/login", h.SigninUser)
+	r.Post("/login/two-factor/challenge", h.ValidateTwoFactor)
+	r.Post("/login/refresh", h.RefreshToken)
 	r.Post("/token/invalidate", h.InvalidateToken)
-	r.Post("/users/{username}/two-factor", h.UpdateTwoFactor)
-	r.Post("/users/{username}/two-factor/check", h.ValidateTwoFactor)
 
 	return r
-}
-
-type UserSignUpRequest struct {
-	Username string `json:"username" validate:"required,max=256"`
-	Name     string `json:"name" validate:"required,max=256"`
-	Password string `json:"password" validate:"required"`
 }
 
 type UserSignInRequest struct {
@@ -43,6 +37,10 @@ type UserSignInResponse struct {
 	RefreshToken string `json:"refreshToken"`
 }
 
+type TwoFactorRequiredResponse struct {
+	TwoFactorToken string `json:"twoFactorToken"`
+}
+
 type InvalidateTokenRequest struct {
 	UUID string `json:"uuid" validate:"required,uuid"`
 }
@@ -51,67 +49,22 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refreshToken"`
 }
 
-type UserResponse struct {
-	Username string `json:"username"`
-	Name     string `json:"name"`
-}
-
-type UpdateTwoFactorRequest struct {
-	Type TwoFactorType `json:"type" validate:"required"`
-}
-
 type ValidateTwoFactorRequest struct {
 	Code string `json:"code" validate:"required"`
 }
 
 type JWTHandler struct {
-	UserRepository UserRepository
+	UserRepository user.UserRepository
 	TokenManager   TokenManagerInterface
 	Config         config.Config
 }
 
 func ProvideJWTHandler(config config.Config) *JWTHandler {
 	return &JWTHandler{
-		UserRepository: NewJSONUserRepository("users", "people.json"),
+		UserRepository: user.NewJSONUserRepository("users", "people.json"),
 		TokenManager:   NewTokenManager(config),
 		Config:         config,
 	}
-}
-
-func (h *JWTHandler) SignUpUser(w http.ResponseWriter, r *http.Request) {
-	var ur UserSignUpRequest
-
-	err := json.NewDecoder(r.Body).Decode(&ur)
-
-	if nil != err {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	err = validator.New().Struct(ur)
-
-	if nil != err {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	u, err := h.UserRepository.GetUser(ur.Username)
-	if nil != err && err != UserNotFoundError {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if nil != u {
-		http.Error(w, UserExistsError.Error(), http.StatusConflict)
-		return
-	}
-
-	err = h.UserRepository.StoreUser(ur.Username, ur.Name, ur.Password)
-	if nil != err {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	render.PlainText(w, r, "User added successfully")
 }
 
 func (h *JWTHandler) SigninUser(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +85,7 @@ func (h *JWTHandler) SigninUser(w http.ResponseWriter, r *http.Request) {
 	}
 	u, err := h.UserRepository.GetUser(ur.Username)
 	if nil != err {
-		if err == UserNotFoundError {
+		if err == user.UserNotFoundError {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -142,6 +95,17 @@ func (h *JWTHandler) SigninUser(w http.ResponseWriter, r *http.Request) {
 
 	if err = bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(ur.Password)); nil != err {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Return 2fa access token if that is required to log in properly.
+	if u.TwoFactorInfo.Type != two_factor.TwoFactorDisabled {
+		tt, err := h.TokenManager.CreateTwoFactorToken(u.Username)
+		if nil != err {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		render.JSON(w, r, TwoFactorRequiredResponse{TwoFactorToken: tt})
 		return
 	}
 
@@ -178,7 +142,7 @@ func (h *JWTHandler) InvalidateToken(w http.ResponseWriter, r *http.Request) {
 
 	if nil != err {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return // Everything that does a render of the plaintext, should not do that instead.
 	}
 
 	err = h.TokenManager.InvalidateRefreshToken(itr.UUID)
@@ -230,83 +194,29 @@ func (h *JWTHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	render.PlainText(w, r, at)
 }
 
-func (h *JWTHandler) UserList(w http.ResponseWriter, r *http.Request) {
-	uList, err := h.UserRepository.GetUserList()
-
-	var resp []UserResponse
-
-	for _, user := range uList {
-		resp = append(resp, UserResponse{
-			Username: user.Username,
-			Name:     user.Name,
-		})
-	}
-
-	if nil != err {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	render.JSON(w, r, resp)
-}
-
-func (h *JWTHandler) UpdateTwoFactor(w http.ResponseWriter, r *http.Request) {
-	var utfr UpdateTwoFactorRequest
-	err := json.NewDecoder(r.Body).Decode(&utfr)
-	if nil != err {
-		http.Error(w, err.Error(), 500)
-	}
-
-	username := chi.URLParam(r, "username")
-	u, err := h.UserRepository.GetUser(username)
-	if nil != err {
-		if err == UserNotFoundError {
-			http.Error(w, err.Error(), 404)
-			return
-		}
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
-	switch utfr.Type {
-	case TwoFactorDisabled:
-		u.TwoFactorInfo.Type = TwoFactorDisabled
-		u.TwoFactorInfo.OneTimePasswordSecret = ""
-	case TwoFactorAuthenticator:
-		u.TwoFactorInfo.Type = TwoFactorAuthenticator
-		key, err := totp.Generate(totp.GenerateOpts{
-			Issuer:      h.Config.DomainName,
-			AccountName: u.Username,
-		})
-		if nil != err {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		u.TwoFactorInfo.OneTimePasswordSecret = key.Secret()
-		// TODO: save this user object properly. Requires some rewrite of user code to be better structured.
-		// Consider splitting it all off into its own pkg.
-		render.JSON(w, r, key.Secret())
-	}
-}
-
 func (h *JWTHandler) ValidateTwoFactor(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	// Decode the bearer header here to use that in validating the 2fa request.
+	fmt.Println(authHeader)
+
 	var vtfr ValidateTwoFactorRequest
 	err := json.NewDecoder(r.Body).Decode(&vtfr)
 	if nil != err {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
 	username := chi.URLParam(r, "username")
 	u, err := h.UserRepository.GetUser(username)
 	if nil != err {
-		if err == UserNotFoundError {
+		if err == user.UserNotFoundError {
 			http.Error(w, err.Error(), 404)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if u.TwoFactorInfo.Type == TwoFactorDisabled {
-		http.Error(w, "Two factor was not enabled for this user", 400)
+	if u.TwoFactorInfo.Type == two_factor.TwoFactorDisabled {
+		http.Error(w, "Two factor was not enabled for this user", http.StatusBadRequest)
 		return
 	}
 

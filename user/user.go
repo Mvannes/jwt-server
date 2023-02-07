@@ -1,8 +1,9 @@
-package jwt
+package user
 
 import (
 	"encoding/json"
 	"errors"
+	"github.com/mvannes/jwt-server/two_factor"
 	"io/ioutil"
 	"os"
 	"path"
@@ -13,16 +14,9 @@ import (
 var UserExistsError = errors.New("User already exists")
 var UserNotFoundError = errors.New("User not found")
 
-type TwoFactorType string
-
-const (
-	TwoFactorDisabled      TwoFactorType = "disabled"
-	TwoFactorAuthenticator               = "authenticator"
-)
-
 type TwoFactor struct {
-	Type                  TwoFactorType `json:"type"`
-	OneTimePasswordSecret string        `json:"oneTimePasswordSecret"`
+	Type                  two_factor.TwoFactorType `json:"type"`
+	OneTimePasswordSecret string                   `json:"oneTimePasswordSecret"`
 }
 
 type User struct {
@@ -32,9 +26,22 @@ type User struct {
 	TwoFactorInfo TwoFactor `json:"twoFactorInfo"`
 }
 
+func NewUser(username, name, password string) (User, error) {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), 6)
+	return User{
+		Username:     username,
+		Name:         name,
+		PasswordHash: string(hashedPassword),
+		TwoFactorInfo: TwoFactor{
+			Type:                  two_factor.TwoFactorDisabled,
+			OneTimePasswordSecret: "",
+		},
+	}, err
+}
+
 type UserRepository interface {
 	GetUser(username string) (*User, error)
-	StoreUser(username string, name string, password string) error
+	StoreUser(user User) error
 	GetUserList() ([]User, error)
 }
 
@@ -67,7 +74,7 @@ func (us *JSONUserRepository) GetUser(username string) (*User, error) {
 	return nil, UserNotFoundError
 }
 
-func (us *JSONUserRepository) StoreUser(username string, name string, password string) error {
+func (us *JSONUserRepository) StoreUser(user User) error {
 	if _, err := os.Stat(us.storageDir); os.IsNotExist(err) {
 		err = os.MkdirAll(us.storageDir, os.ModePerm)
 		if nil != err {
@@ -80,22 +87,7 @@ func (us *JSONUserRepository) StoreUser(username string, name string, password s
 		return err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), 6)
-	if nil != err {
-		return err
-	}
-
-	u := User{
-		Username:     username,
-		Name:         name,
-		PasswordHash: string(hashedPassword),
-		TwoFactorInfo: TwoFactor{
-			Type:                  TwoFactorDisabled,
-			OneTimePasswordSecret: "",
-		},
-	}
-
-	userList = append(userList, u)
+	userList = append(userList, user)
 
 	jsonList, err := json.Marshal(userList)
 	if nil != err {

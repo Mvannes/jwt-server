@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/mvannes/jwt-server/user"
 	"log"
 	"net/http"
 	"time"
@@ -29,6 +30,7 @@ func Routes(config config.Config) *chi.Mux {
 
 	r.Mount("/jwk", jwk.Routes(config))
 	r.Mount("/jwt", jwt.Routes(config))
+	r.Mount("/users", user.Routes(config))
 
 	return r
 }
