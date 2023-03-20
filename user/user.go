@@ -3,40 +3,27 @@ package user
 import (
 	"encoding/json"
 	"errors"
-	"github.com/mvannes/jwt-server/two_factor"
+	"github.com/google/uuid"
 	"io/ioutil"
 	"os"
 	"path"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 var UserExistsError = errors.New("User already exists")
 var UserNotFoundError = errors.New("User not found")
 
-type TwoFactor struct {
-	Type                  two_factor.TwoFactorType `json:"type"`
-	OneTimePasswordSecret string                   `json:"oneTimePasswordSecret"`
-}
-
 type User struct {
-	Username      string    `json:"username"`
-	Name          string    `json:"name"`
-	PasswordHash  string    `json:"passwordHash"`
-	TwoFactorInfo TwoFactor `json:"twoFactorInfo"`
+	Id       uuid.UUID `json:"id"`
+	Username string    `json:"username"`
+	Name     string    `json:"name"`
 }
 
-func NewUser(username, name, password string) (User, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), 6)
+func NewUser(username, name string) User {
 	return User{
-		Username:     username,
-		Name:         name,
-		PasswordHash: string(hashedPassword),
-		TwoFactorInfo: TwoFactor{
-			Type:                  two_factor.TwoFactorDisabled,
-			OneTimePasswordSecret: "",
-		},
-	}, err
+		Id:       uuid.New(),
+		Username: username,
+		Name:     name,
+	}
 }
 
 type UserRepository interface {
@@ -106,7 +93,7 @@ func (us *JSONUserRepository) GetUserList() ([]User, error) {
 		}
 	}
 
-	var userList []User // Make sure that this does not return users with their password.
+	var userList []User
 	if len(fileContent) > 0 {
 		if err = json.Unmarshal(fileContent, &userList); nil != err {
 			return userList, err

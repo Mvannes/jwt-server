@@ -1,5 +1,6 @@
 keys/
 users/
 tokens/
+credentials/
 jwt-server
 
