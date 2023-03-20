@@ -3,6 +3,7 @@ package jwt
 import (
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"io/ioutil"
 	"os"
 	"path"
@@ -11,7 +12,7 @@ import (
 var errTokenNotFound = errors.New("Refresh token was not found")
 
 type RefreshTokenRepository interface {
-	GetToken(uuid string) (RefreshToken, error)
+	GetToken(uuid uuid.UUID) (RefreshToken, error)
 	StoreToken(token RefreshToken) error
 }
 
@@ -33,13 +34,13 @@ type JSONRefreshTokenRepository struct {
 }
 
 type RefreshToken struct {
-	UUID      string `json:"uuid"`
-	Username  string `json:"username"`
-	Valid     bool   `json:"valid"`
-	CreatedAt int64  `json:"createdAt"`
+	UUID      uuid.UUID `json:"uuid"`
+	UserID    uuid.UUID `json:"userId"`
+	Valid     bool      `json:"valid"`
+	CreatedAt int64     `json:"createdAt"`
 }
 
-func (r *JSONRefreshTokenRepository) GetToken(uuid string) (RefreshToken, error) {
+func (r *JSONRefreshTokenRepository) GetToken(uuid uuid.UUID) (RefreshToken, error) {
 	tokenList, err := r.getTokenList()
 	if nil != err {
 		return RefreshToken{}, err
@@ -73,14 +74,14 @@ func (r *JSONRefreshTokenRepository) StoreToken(token RefreshToken) error {
 	found := false
 	for key, storedToken := range tokenList {
 		if storedToken.UUID == token.UUID {
-			storedToken.Username = token.Username
+			storedToken.UserID = token.UserID
 			storedToken.Valid = token.Valid
 			found = true
 			tokenList[key] = storedToken
 			continue
 		}
 
-		if storedToken.Username != token.Username {
+		if storedToken.UserID != token.UserID {
 			continue
 		}
 		storedToken.Valid = false

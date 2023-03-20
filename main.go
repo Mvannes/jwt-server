@@ -36,6 +36,8 @@ func Routes(config config.Config) *chi.Mux {
 }
 
 func initKeys() error {
+	// TODO: Requires me to make a keys dir by hand now.
+	// Configure it, and change this to not require manual intervention.
 	km := jwk.NewKeyManager()
 	_, err := km.FetchLatestKeyVersion()
 

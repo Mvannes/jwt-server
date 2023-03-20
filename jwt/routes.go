@@ -3,10 +3,12 @@ package jwt
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/mvannes/jwt-server/credential"
 	"github.com/mvannes/jwt-server/user"
 	"github.com/pquerna/otp/totp"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -22,7 +24,7 @@ func Routes(config config.Config) *chi.Mux {
 	r.Post("/signup", h.SignUpUser)
 	r.Post("/login", h.SigninUser)
 
-	r.Post("/login/{id}/two-factor/", h.UpdateTwoFactor)
+	r.Put("/login/{id}/two-factor", h.UpdateTwoFactor)
 	r.Post("/login/two-factor/challenge", h.ValidateTwoFactor)
 	r.Post("/login/refresh", h.RefreshToken)
 	r.Post("/token/invalidate", h.InvalidateToken)
@@ -51,7 +53,7 @@ type TwoFactorRequiredResponse struct {
 }
 
 type InvalidateTokenRequest struct {
-	UUID string `json:"uuid" validate:"required,uuid"`
+	UUID uuid.UUID `json:"uuid" validate:"required,uuid"`
 }
 
 type RefreshTokenRequest struct {
@@ -104,7 +106,7 @@ func (h *JWTHandler) SignUpUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if nil != u {
+	if u != (user.User{}) {
 		http.Error(w, user.UserExistsError.Error(), http.StatusConflict)
 		return
 	}
@@ -128,7 +130,7 @@ func (h *JWTHandler) SignUpUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	render.PlainText(w, r, "User added successfully")
+	render.PlainText(w, r, newUser.Id.String())
 }
 
 func (h *JWTHandler) SigninUser(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +158,7 @@ func (h *JWTHandler) SigninUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	creds, err := h.UserCredentialRepository.GetCredentials(*u)
+	creds, err := h.UserCredentialRepository.GetCredentials(u)
 	if nil != err {
 		if err == credential.UserCredentialsNotFoundError {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -173,7 +175,7 @@ func (h *JWTHandler) SigninUser(w http.ResponseWriter, r *http.Request) {
 
 	// Return 2fa access token if that is required to log in properly.
 	if creds.TwoFactor.Type != credential.TwoFactorDisabled {
-		tt, err := h.TokenManager.CreateTwoFactorToken(u.Username)
+		tt, err := h.TokenManager.CreateTwoFactorToken(u.Id, u.Username)
 		if nil != err {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -182,23 +184,30 @@ func (h *JWTHandler) SigninUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	at, err := h.TokenManager.CreateAccessToken(u.Username, u.Name)
+	resp, err := h.createSignInResponse(u)
 	if nil != err {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	render.JSON(w, r, resp)
+}
 
-	rt, err := h.TokenManager.CreateRefreshToken(u.Username)
+func (h *JWTHandler) createSignInResponse(u user.User) (UserSignInResponse, error) {
 
+	at, err := h.TokenManager.CreateAccessToken(u.Id, u.Username, u.Name)
 	if nil != err {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return UserSignInResponse{}, err
 	}
 
-	render.JSON(w, r, UserSignInResponse{
+	rt, err := h.TokenManager.CreateRefreshToken(u.Id)
+
+	if nil != err {
+		return UserSignInResponse{}, err
+	}
+	return UserSignInResponse{
 		AccessToken:  at,
 		RefreshToken: rt,
-	})
+	}, nil
 }
 
 func (h *JWTHandler) InvalidateToken(w http.ResponseWriter, r *http.Request) {
@@ -252,13 +261,13 @@ func (h *JWTHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.UserRepository.GetUser(rt.Username)
+	u, err := h.UserRepository.GetUserByID(rt.UserID)
 	if nil != err {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	at, err := h.TokenManager.CreateAccessToken(u.Username, u.Name)
+	at, err := h.TokenManager.CreateAccessToken(u.Id, u.Username, u.Name)
 	if nil != err {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -269,19 +278,28 @@ func (h *JWTHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 func (h *JWTHandler) ValidateTwoFactor(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")
-	// TODO:
-	// Decode the bearer header here to use that in validating the 2fa request.
-	// Ensure this returns some better handling at some point.
-	fmt.Println(authHeader)
+
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	token, err := h.TokenManager.DecodeTwoFactorToken(tokenString)
 
 	var vtfr ValidateTwoFactorRequest
-	err := json.NewDecoder(r.Body).Decode(&vtfr)
+	err = json.NewDecoder(r.Body).Decode(&vtfr)
 	if nil != err {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	username := chi.URLParam(r, "username")
-	u, err := h.UserRepository.GetUser(username)
+	userId, err := uuid.Parse(token.Subject)
+	if nil != err {
+		http.Error(w, "Subject not a uuid", http.StatusBadRequest)
+		return
+	}
+
+	u, err := h.UserRepository.GetUserByID(userId)
 	if nil != err {
 		if err == user.UserNotFoundError {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -290,7 +308,7 @@ func (h *JWTHandler) ValidateTwoFactor(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	creds, err := h.UserCredentialRepository.GetCredentials(*u)
+	creds, err := h.UserCredentialRepository.GetCredentials(u)
 	if nil != err {
 		if err == credential.UserCredentialsNotFoundError {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -304,23 +322,38 @@ func (h *JWTHandler) ValidateTwoFactor(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Two factor was not enabled for this user", http.StatusBadRequest)
 		return
 	}
-	msg := "invalid code"
-	if totp.Validate(vtfr.Code, creds.TwoFactor.OneTimePasswordSecret) {
-		msg = "valid code!"
+
+	if !totp.Validate(vtfr.Code, creds.TwoFactor.OneTimePasswordSecret) {
+		http.Error(w, "invalid code", http.StatusUnauthorized)
+		return
 	}
-	// Everything that does a render of the plaintext, should not do that instead.
-	render.PlainText(w, r, msg)
+
+	resp, err := h.createSignInResponse(u)
+	if nil != err {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	render.JSON(w, r, resp)
 }
 
 func (h *JWTHandler) UpdateTwoFactor(w http.ResponseWriter, r *http.Request) {
 	var utfr UpdateTwoFactorRequest
 	err := json.NewDecoder(r.Body).Decode(&utfr)
 	if nil != err {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	username := chi.URLParam(r, "username")
-	u, err := h.UserRepository.GetUser(username)
+	idString := chi.URLParam(r, "id")
+	userId, err := uuid.Parse(idString)
+
+	fmt.Println(utfr, idString, err)
+	if nil != err {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	u, err := h.UserRepository.GetUserByID(userId)
 	if nil != err {
 		if err == user.UserNotFoundError {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -330,7 +363,7 @@ func (h *JWTHandler) UpdateTwoFactor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	creds, err := h.UserCredentialRepository.GetCredentials(*u)
+	creds, err := h.UserCredentialRepository.GetCredentials(u)
 	if nil != err {
 		if err == credential.UserCredentialsNotFoundError {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -356,7 +389,7 @@ func (h *JWTHandler) UpdateTwoFactor(w http.ResponseWriter, r *http.Request) {
 			AccountName: u.Username,
 		})
 		if nil != err {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		creds.TwoFactor.OneTimePasswordSecret = key.Secret()

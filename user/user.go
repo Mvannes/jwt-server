@@ -27,7 +27,8 @@ func NewUser(username, name string) User {
 }
 
 type UserRepository interface {
-	GetUser(username string) (*User, error)
+	GetUserByID(userID uuid.UUID) (User, error)
+	GetUser(username string) (User, error)
 	StoreUser(user User) error
 	GetUserList() ([]User, error)
 }
@@ -46,19 +47,34 @@ func NewJSONUserRepository(storageDir string, fileName string) *JSONUserReposito
 	return jsonUserStorageInstance
 }
 
-func (us *JSONUserRepository) GetUser(username string) (*User, error) {
+func (us *JSONUserRepository) GetUserByID(userID uuid.UUID) (User, error) {
 	userList, err := us.GetUserList()
 	if nil != err {
-		return nil, err
+		return User{}, err
+	}
+
+	for _, user := range userList {
+		if user.Id == userID {
+			return user, nil
+		}
+	}
+
+	return User{}, UserNotFoundError
+}
+
+func (us *JSONUserRepository) GetUser(username string) (User, error) {
+	userList, err := us.GetUserList()
+	if nil != err {
+		return User{}, err
 	}
 
 	for _, user := range userList {
 		if user.Username == username {
-			return &user, nil
+			return user, nil
 		}
 	}
 
-	return nil, UserNotFoundError
+	return User{}, UserNotFoundError
 }
 
 func (us *JSONUserRepository) StoreUser(user User) error {

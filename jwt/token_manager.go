@@ -33,10 +33,11 @@ type RefreshTokenClaims struct {
 
 type TokenManagerInterface interface {
 	DecodeRefreshToken(refreshToken string) (RefreshToken, error)
-	CreateTwoFactorToken(username string) (string, error)
-	CreateAccessToken(username string, name string) (string, error)
-	CreateRefreshToken(username string) (string, error)
-	InvalidateRefreshToken(uuid string) error
+	DecodeTwoFactorToken(twoFactorToken string) (TwoFactorClaims, error)
+	CreateTwoFactorToken(userId uuid.UUID, username string) (string, error)
+	CreateAccessToken(userId uuid.UUID, username string, name string) (string, error)
+	CreateRefreshToken(userId uuid.UUID) (string, error)
+	InvalidateRefreshToken(uuid uuid.UUID) error
 }
 
 type TokenManager struct {
@@ -90,7 +91,12 @@ func (t *TokenManager) DecodeRefreshToken(refreshToken string) (RefreshToken, er
 		return RefreshToken{}, errors.New("Invalid token given")
 	}
 
-	rt, err := t.refreshTokenRepository.GetToken(c.UUID)
+	rtId, err := uuid.Parse(c.UUID)
+	if nil != err {
+		return RefreshToken{}, err
+	}
+
+	rt, err := t.refreshTokenRepository.GetToken(rtId)
 	if nil != err {
 		return RefreshToken{}, err
 	}
@@ -101,7 +107,41 @@ func (t *TokenManager) DecodeRefreshToken(refreshToken string) (RefreshToken, er
 	return rt, nil
 }
 
-func (t *TokenManager) CreateTwoFactorToken(username string) (string, error) {
+func (t *TokenManager) DecodeTwoFactorToken(twoFactorToken string) (TwoFactorClaims, error) {
+	var c TwoFactorClaims
+	token, err := jwt.ParseWithClaims(
+		twoFactorToken,
+		&c,
+		func(token *jwt.Token) (interface{}, error) {
+			alg := token.Header["alg"]
+			if nil == alg {
+				return nil, errors.New("No algorithm given")
+			}
+			if false == strings.HasPrefix(fmt.Sprint(alg), "RS512") {
+				return nil, errors.New("Wrong algorithm given")
+			}
+			kid := token.Header["kid"]
+			if nil == kid {
+				return nil, errors.New("No key id given")
+			}
+			keyPair, err := t.keyManager.FetchKeyPair(fmt.Sprint(kid))
+			if nil != err {
+				return nil, err
+			}
+			return keyPair.PublicKey, nil
+		},
+	)
+	if nil != err {
+		return c, err
+	}
+
+	if !token.Valid {
+		return c, errors.New("Invalid token given")
+	}
+	return c, nil
+}
+
+func (t *TokenManager) CreateTwoFactorToken(userId uuid.UUID, username string) (string, error) {
 	latestVersion, err := t.keyManager.FetchLatestKeyVersion()
 	if nil != err {
 		return "", err
@@ -117,6 +157,7 @@ func (t *TokenManager) CreateTwoFactorToken(username string) (string, error) {
 		Username:      username,
 		TwoFactorType: "basic",
 		StandardClaims: jwt.StandardClaims{
+			Subject:   userId.String(),
 			ExpiresAt: now.Add(5 * time.Minute).Unix(),
 			IssuedAt:  now.Unix(),
 		},
@@ -128,7 +169,7 @@ func (t *TokenManager) CreateTwoFactorToken(username string) (string, error) {
 	return token.SignedString(keyPair.PrivateKey)
 }
 
-func (t *TokenManager) CreateAccessToken(username string, name string) (string, error) {
+func (t *TokenManager) CreateAccessToken(userId uuid.UUID, username string, name string) (string, error) {
 	latestVersion, err := t.keyManager.FetchLatestKeyVersion()
 	if nil != err {
 		return "", err
@@ -144,6 +185,7 @@ func (t *TokenManager) CreateAccessToken(username string, name string) (string, 
 		Username: username,
 		Name:     name,
 		StandardClaims: jwt.StandardClaims{
+			Subject:   userId.String(),
 			ExpiresAt: now.Add(5 * time.Minute).Unix(),
 			IssuedAt:  now.Unix(),
 		},
@@ -155,7 +197,7 @@ func (t *TokenManager) CreateAccessToken(username string, name string) (string, 
 	return token.SignedString(keyPair.PrivateKey)
 }
 
-func (t *TokenManager) CreateRefreshToken(username string) (string, error) {
+func (t *TokenManager) CreateRefreshToken(userId uuid.UUID) (string, error) {
 	latestVersion, err := t.keyManager.FetchLatestKeyVersion()
 	if nil != err {
 		return "", err
@@ -167,9 +209,9 @@ func (t *TokenManager) CreateRefreshToken(username string) (string, error) {
 	}
 	now := time.Now()
 
-	uuidString := uuid.New().String()
+	refreshTokenID := uuid.New()
 	claims := &RefreshTokenClaims{
-		UUID: uuidString,
+		UUID: refreshTokenID.String(),
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: now.Add(24 * time.Hour).Unix(),
 			IssuedAt:  now.Unix(),
@@ -183,7 +225,7 @@ func (t *TokenManager) CreateRefreshToken(username string) (string, error) {
 	if nil != err {
 		return "", err
 	}
-	err = t.refreshTokenRepository.StoreToken(RefreshToken{UUID: uuidString, Username: username, Valid: true, CreatedAt: now.Unix()})
+	err = t.refreshTokenRepository.StoreToken(RefreshToken{UUID: refreshTokenID, UserID: userId, Valid: true, CreatedAt: now.Unix()})
 	if nil != err {
 		return "", err
 	}
@@ -191,7 +233,7 @@ func (t *TokenManager) CreateRefreshToken(username string) (string, error) {
 	return tokenString, nil
 }
 
-func (t *TokenManager) InvalidateRefreshToken(uuid string) error {
+func (t *TokenManager) InvalidateRefreshToken(uuid uuid.UUID) error {
 	token, err := t.refreshTokenRepository.GetToken(uuid)
 	if nil != err {
 		return err

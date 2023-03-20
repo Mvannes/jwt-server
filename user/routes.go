@@ -1,6 +1,7 @@
 package user
 
 import (
+	"github.com/google/uuid"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -18,8 +19,9 @@ func Routes(config config.Config) *chi.Mux {
 }
 
 type UserResponse struct {
-	Username string `json:"username"`
-	Name     string `json:"name"`
+	ID       uuid.UUID `json:"id"`
+	Username string    `json:"username"`
+	Name     string    `json:"name"`
 }
 
 type UserHandler struct {
@@ -41,6 +43,7 @@ func (h *UserHandler) UserList(w http.ResponseWriter, r *http.Request) {
 
 	for _, user := range uList {
 		resp = append(resp, UserResponse{
+			ID:       user.Id,
 			Username: user.Username,
 			Name:     user.Name,
 		})
